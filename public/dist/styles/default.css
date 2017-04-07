@@ -39,7 +39,8 @@ body {
   background: #f5f5f5; }
 
 .main-wrapper {
-  width: 560px;
+  max-width: 592px;
+  min-width: 212px;
   margin: 0 auto; }
 
 .action {
@@ -161,7 +162,8 @@ button.action_target, input.action_target {
 .todos-main {
   background: #fff;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  position: relative; }
+  position: relative;
+  margin: 0 16px 16px; }
 
 .todos-main:before,
 .todos-main:after {
