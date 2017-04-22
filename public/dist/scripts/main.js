@@ -1,6 +1,99 @@
 (function () {
 
-    var ENTER_KEY_CODE = 13;
+    var l10n;
+
+    (function () {
+
+        function EAST_SLAVIC_ALGORITHM(number) {
+            var value = Math.abs(number);
+
+            if ((value % 10 === 1) && (value % 100 !== 11)) {
+                return 0;
+            }
+            if ((2 <= (value % 10))
+                && ((value % 10) <= 4)
+                && (Math.floor((value % 100) / 10) !== 1)
+            ) {
+                return 1;
+            }
+
+            return 2;
+        }
+
+        function ROMANO_GERMANIC_ALGORITHM(number) {
+            return (Math.abs(number) === 1) ? 0 : 1;
+        }
+
+        var pluralAlgorithms = {
+            'ru': EAST_SLAVIC_ALGORITHM,
+            'en': ROMANO_GERMANIC_ALGORITHM
+        };
+
+        l10n = {
+            language: 'ru',
+            _dictionaries: {},
+
+            /**
+             * @param {String} key
+             * @return {String}
+             * @private
+             */
+            _getDictValue: function (key) {
+                var language = this.language;
+
+                if (!(language in this._dictionaries)
+                    || !(key in this._dictionaries[language])
+                ) {
+                    return null;
+                }
+
+                return this._dictionaries[language][key];
+            },
+
+            /**
+             * @param {String} languageCode
+             * @param {Object} dict
+             * @return {l10n}
+             */
+            provideDict: function (languageCode, dict) {
+                this._dictionaries[languageCode] = dict;
+                return this;
+            },
+
+            /**
+             * @param {String} key
+             * @return {String}
+             */
+            simple: function (key) {
+                var dictValue = this._getDictValue(key);
+                if (dictValue !== null) {
+                    return dictValue;
+                }
+                return key;
+            },
+
+            /**
+             * @param {String} key
+             * @param {Number} number
+             * @return {String}
+             */
+            plural: function (key, number) {
+                var dictValue = this._getDictValue(key);
+                if (dictValue === null) {
+                    return key;
+                }
+
+                var currentPluralAlgorithm = pluralAlgorithms[this.language] || pluralAlgorithms.ru;
+                var result = dictValue[currentPluralAlgorithm(number)];
+
+                if (result != null) {
+                    return result;
+                }
+                return key;
+
+            }
+        }
+    }());
 
     var templatesEngine;
 
@@ -41,8 +134,27 @@
         }
     }());
 
+    var ENTER_KEY_CODE = 13;
 
+    /**
+     * @param {HTMLElement} node
+     * @return {Node}
+     */
+    function getTextNode(node) {
+        var childs = node.childNodes;
+        var i = 0;
+        var l = childs.length;
 
+        for (; i !== l; i += 1) {
+            if (childs[i].nodeName === '#text') {
+                return childs[i];
+            }
+        }
+
+        var result = document.createTextNode('');
+        node.appendChild(result);
+        return result;
+    }
 
     /**
      * @param {Function} Extendable
@@ -137,6 +249,7 @@
     var TodoList;
     var TodoItem;
     var TodoActionsBar;
+    var Filter;
 
 
     (function () {
@@ -234,6 +347,7 @@
              */
             this._items = [];
             this._todosList = document.querySelector(TODO_LIST_SELECTOR);
+            this._currentFilter = 'all';
 
             this._initEventable();
         }
@@ -242,10 +356,17 @@
 
         var todoListConstructorPrototype = TodoListConstructor.prototype;
 
+        /**
+         * @return {Number}
+         */
         todoListConstructorPrototype.getItemsCount =function () {
             return this._items.length;
         };
 
+        /**
+         * @param {Object} todoItemData
+         * @return {TodoListConstructor}
+         */
         todoListConstructorPrototype.createItem = function (todoItemData) {
             var item = new TodoItem(Object.assign(
                 {
@@ -265,6 +386,27 @@
             return this;
         };
 
+        /**
+         * @return {TodoListConstructor}
+         */
+        todoListConstructorPrototype.removeCompletedItems = function () {
+            var items = this._items;
+            var i = items.length;
+
+            for (; i-- ;) {
+                if (items[i].model.isReady) {
+                    items[i].remove();
+                }
+            }
+
+            return this;
+        };
+
+        /**
+         * @param {Number} itemId
+         * @return {TodoItem|null}
+         * @private
+         */
         todoListConstructorPrototype._getItemById = function (itemId) {
             var items = this._items;
 
@@ -278,7 +420,7 @@
         };
 
         todoListConstructorPrototype._onItemChange = function (itemModel) {
-            
+            this.filterShowedItems(this._currentFilter);
         };
 
         todoListConstructorPrototype._onItemRemove = function (itemId) {
@@ -305,12 +447,51 @@
             return this;
         };
 
+        /**
+         * @param {String} filterId
+         * @return {TodoListConstructor}
+         */
+        todoListConstructorPrototype.setFilter = function (filterId) {
+            this._currentFilter = filterId;
+            return this.filterShowedItems(filterId);
+        };
+
+        /**
+         * @param {String} filterId
+         * @return {TodoListConstructor}
+         */
+        todoListConstructorPrototype.filterShowedItems = function (filterId) {
+            this._items.forEach(function (item) {
+                switch (filterId) {
+                    case 'all':
+                        item.show();
+                        break;
+                    case 'ready':
+                        if (item.model.isReady) {
+                            item.show();
+                        } else {
+                            item.hide();
+                        }
+                        break;
+                    case 'unready':
+                        if (!item.model.isReady) {
+                            item.show();
+                        } else {
+                            item.hide();
+                        }
+                        break;
+                }
+            });
+            return this;
+        };
+
         TodoList = TodoListConstructor;
     }());
 
 
     (function () {
         var READY_MODIFICATOR = '__ready';
+        var HIDDEN_MODIFICATOR = '__hide';
 
         /**
          * @param itemData
@@ -348,11 +529,18 @@
 
         var todoItemConstructorPrototype = TodoItemConstructor.prototype;
 
-        todoItemConstructorPrototype.render = function (root) {
-            root.appendChild(this._root);
+        /**
+         * @param {HTMLElement} parent
+         * @return {TodoItemConstructor}
+         */
+        todoItemConstructorPrototype.render = function (parent) {
+            parent.appendChild(this._root);
             return this;
         };
 
+        /**
+         * @param {Event} e
+         */
         todoItemConstructorPrototype.handleEvent = function (e) {
             switch (e.type) {
                 case 'change':
@@ -369,6 +557,10 @@
             }
         };
 
+        /**
+         * @param {String} text
+         * @return {TodoItemConstructor}
+         */
         todoItemConstructorPrototype.setText = function (text) {
             if (this.model.text !== text) {
                 this._text.innerHTML = text;
@@ -378,14 +570,24 @@
             return this;
         };
 
+        /**
+         * @param {Boolean} isReady
+         * @return {TodoItemConstructor}
+         * @private
+         */
         todoItemConstructorPrototype._setReadyModificator = function (isReady) {
             if (isReady) {
                 this._root.classList.add(READY_MODIFICATOR);
             } else {
                 this._root.classList.remove(READY_MODIFICATOR);
             }
+            return this;
         };
 
+        /**
+         * @param {Boolean} isReady
+         * @return {TodoItemConstructor}
+         */
         todoItemConstructorPrototype.setReady = function (isReady) {
             if (isReady !== this.model.isReady) {
                 this._markReady.checked = isReady;
@@ -396,9 +598,28 @@
             return this;
         };
 
+        /**
+         * @return {TodoItemConstructor}
+         */
         todoItemConstructorPrototype.remove = function () {
             this._root.parentNode.removeChild(this._root);
             this.trigger('remove', this.model.id);
+            return this;
+        };
+
+        /**
+         * @return {TodoItemConstructor}
+         */
+        todoItemConstructorPrototype.show = function () {
+            this._root.classList.remove(HIDDEN_MODIFICATOR);
+            return this;
+        };
+
+        /**
+         * @return {TodoItemConstructor}
+         */
+        todoItemConstructorPrototype.hide = function () {
+            this._root.classList.add(HIDDEN_MODIFICATOR);
             return this;
         };
 
@@ -407,15 +628,125 @@
 
 
     (function () {
-        function TodoActionsBarConstructor() {
 
+        /**
+         * @constructor
+         * @implements {EventListener}
+         */
+        function TodoActionsBarConstructor() {
+            this._initEventable();
+
+            this._counterNode = document.querySelector('.js-todos-actions-bar_counter');
+            this._counterNodeText = getTextNode(this._counterNode);
+            this._clearCompletedNode = document.querySelector('.js-todos-actions-bar_clear-completed');
+
+            this._clearCompletedNode.addEventListener('click', this);
+
+            this._filters = new Filter(document.querySelector('.js-todos-actions-bar_filter'));
+
+            this._filters.on('filterSelected', this._onFilterSelected, this);
         }
+
+        extendConstructor(TodoActionsBarConstructor, Eventable);
+
+        var todoActionsBarConstructorPrototype = TodoActionsBarConstructor.prototype;
+
+        todoActionsBarConstructorPrototype._onFilterSelected = function (filterId) {
+            this.trigger('filterSelected', filterId);
+        };
+
+        /**
+         * @return {TodoActionsBarConstructor}
+         * @private
+         */
+        todoActionsBarConstructorPrototype._clearCompleted = function () {
+            this.trigger('clearCompleted');
+            return this;
+        };
+
+        /**
+         * @param {Number} count
+         * @return {TodoActionsBarConstructor}
+         */
+        todoActionsBarConstructorPrototype.setItemsCount = function (count) {
+            this._counterNodeText.nodeValue = count + ' ' + l10n.plural('todosCountLabel', count);
+            return this;
+        };
+
+        /**
+         * @param {Event} e
+         */
+        todoActionsBarConstructorPrototype.handleEvent = function (e) {
+            switch (e.type) {
+                case 'click':
+                    this._clearCompleted();
+                    break;
+            }
+        };
 
         TodoActionsBar = TodoActionsBarConstructor;
     }());
 
 
+    (function () {
+        var ACTIVE_FILTER_MODIFICATOR = '__active';
+
+        /**
+         * @param {HTMLElement} domRoot
+         * @constructor
+         * @implements {EventListener}
+         */
+        function FilterConstructor(domRoot) {
+            this._initEventable();
+
+            var filters = this._filters = domRoot.querySelectorAll('.filter');
+            this._currentActive = null;
+
+            for (var i = filters.length; i-- ;) {
+                filters[i].addEventListener('click', this);
+                if (filters[i].classList.contains(ACTIVE_FILTER_MODIFICATOR)) {
+                    this._currentActive = filters[i];
+                }
+            }
+        }
+
+        extendConstructor(FilterConstructor, Eventable);
+
+        var filterConstructorPrototype = FilterConstructor.prototype;
+
+        /**
+         * @param {HTMLElement} filterElement
+         * @return {FilterConstructor}
+         * @private
+         */
+        filterConstructorPrototype._setFilter = function (filterElement) {
+            if (this._currentActive !== filterElement) {
+                this._currentActive.classList.remove(ACTIVE_FILTER_MODIFICATOR);
+                filterElement.classList.add(ACTIVE_FILTER_MODIFICATOR);
+                this._currentActive = filterElement;
+                this.trigger('filterSelected', filterElement.getAttribute('data-filter'));
+            }
+            return this;
+        };
+
+        filterConstructorPrototype.handleEvent = function (e) {
+            switch (e.type) {
+                case 'click':
+                    this._setFilter(e.target);
+                    break;
+            }
+        };
+
+        Filter = FilterConstructor;
+    }());
+
+
     function init() {
+        var rusDictionary = {
+            'todosCountLabel': ['задача', 'задачи', 'задач']
+        };
+        l10n.provideDict('ru', rusDictionary);
+
         var todoMain = new TodoMain();
         var addTodos = new AddTodos();
         var todoList = new TodoList();
@@ -431,19 +762,31 @@
         });
 
         todoList.on('itemAdd', function (todoItemModel) {
-            if (todoList.getItemsCount() !== 0) {
+            var itemsCount = todoList.getItemsCount();
+
+            if (itemsCount !== 0) {
                 todoMain.showFullInterface();
             }
+
+            todoActionsBar.setItemsCount(itemsCount);
         });
 
         todoList.on('itemDelete', function (todoItemModel) {
-            if (todoList.getItemsCount() === 0) {
+            var itemsCount = todoList.getItemsCount();
+
+            if (itemsCount === 0) {
                 todoMain.hideFullInterface();
             }
+
+            todoActionsBar.setItemsCount(itemsCount);
         });
 
-        todoList.on('itemChange', function (todoItem) {
+        todoActionsBar.on('clearCompleted', function () {
+            todoList.removeCompletedItems();
+        });
 
+        todoActionsBar.on('filterSelected', function (filterId) {
+            todoList.setFilter(filterId);
         });
 
     }

@@ -193,8 +193,8 @@ input.action_target {
   border: 1px solid #ebdfdf;
   padding-top: 1px;
   padding-bottom: 1px;
-  padding-left: 8px -1px;
-  padding-right: 8px -1px;
+  padding-left: 7px;
+  padding-right: 7px;
 }
 
 .todos-title {
@@ -377,8 +377,17 @@ input.action_target {
   opacity: 1;
 }
 
-.todo-item:first-child {
+.todo-item.__hide {
+  display: none;
+}
+
+.todo-item:first-child,
+.todo-item.__hide:first-child ~ .todo-item {
   border-top: 1px solid #e6e6e6;
+}
+
+.todo-item.__hide:first-child ~ .todo-item:not(.__hide) ~ .todo-item {
+  border-top: 0;
 }
 
 .todo-item_ready-checker {
