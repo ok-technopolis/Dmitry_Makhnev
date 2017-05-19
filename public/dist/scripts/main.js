@@ -19,15 +19,15 @@
         var todoActionsBar = new TodoActionsBar();
 
 
-        addTodos.on('newTodo', function (todoData) {
-            todoList.createItem(todoData);
-        });
+        addTodos
+            .on('newTodo',
+                function (todoData) { todoList.createItem(todoData); }
+            )
+            .on('markAsReadyAll',
+                function () { todoList.markAsReadyAll();}
+            );
 
-        addTodos.on('markAsReadyAll', function () {
-            todoList.markAsReadyAll();
-        });
-
-        todoList.on('itemAdd', function (todoItemModel) {
+        function itemsCountWatcher () {
             var itemsCount = todoList.getItemsCount();
 
             if (itemsCount !== 0) {
@@ -35,21 +35,15 @@
             }
 
             todoActionsBar.setItemsCount(itemsCount);
-        });
+        }
 
-        todoList.on('itemDelete', function (todoItemModel) {
-            var itemsCount = todoList.getItemsCount();
+        todoList.on('itemAdd', itemsCountWatcher)
+            .on('itemDelete', itemsCountWatcher);
 
-            if (itemsCount === 0) {
-                todoMain.hideFullInterface();
-            }
-
-            todoActionsBar.setItemsCount(itemsCount);
-        });
-
-        todoActionsBar.on('clearCompleted', function () {
-            todoList.removeCompletedItems();
-        });
+        todoActionsBar.on(
+            'clearCompleted',
+            function () { todoList.removeCompletedItems(); }
+        );
 
         todoActionsBar.on('filterSelected', function (filterId) {
             todoList.setFilter(filterId);
